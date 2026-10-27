@@ -1,0 +1,7 @@
+{
+  "name": "game",
+  "compatibility_date": "2026-10-23",
+  "assets": {
+    "directory": "."    // ← 改成这个，原来可能指向某个子文件夹
+  }
+}

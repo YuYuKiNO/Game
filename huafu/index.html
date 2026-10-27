@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e20">
+<title>僵尸一笔画符 · 一笔画阵</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; overscroll-behavior:none; }
+body {
+  font-family:"KaiTi","STKaiti","Kaiti SC","Noto Serif SC","PingFang SC","Microsoft YaHei",sans-serif;
+  background:#07080f; color:#e8e0c8;
+  user-select:none; -webkit-user-select:none; -webkit-tap-highlight-color:transparent;
+  position:fixed; inset:0;
+}
+#stage { position:absolute; inset:0; overflow:hidden; }
+/* —— 全屏背景图（Gemini 生成的僵尸场景） —— */
+#bg { position:absolute; inset:0; z-index:0;
+  background:url('bg.jpg') center / cover no-repeat; }
+#bg::after { content:''; position:absolute; inset:0;
+  /* 压暗 + 上下渐晕，保证黄纸/僵尸/HUD 的对比度 */
+  background:linear-gradient(180deg,
+    rgba(5,8,20,.58) 0%, rgba(5,8,20,.30) 40%, rgba(5,8,20,.52) 72%, rgba(5,8,20,.78) 100%); }
+
+#paper-wrap { position:absolute; left:50%; top:calc(64px + env(safe-area-inset-top,0px));
+  transform:translateX(-50%); z-index:10;
+  width:min(84vw, 300px, calc((100vh - 190px) * 0.77)); }
+#paper { width:100%; height:auto; display:block; touch-action:none;
+  filter:drop-shadow(0 10px 24px rgba(0,0,0,.55)); }
+#paper-glow { position:absolute; inset:-12%; border-radius:50%; z-index:-1; pointer-events:none; opacity:0; }
+#paper-glow.on { animation:glowpop 1.5s ease-out forwards; }
+@keyframes glowpop { 0%{opacity:0} 25%{opacity:1} 100%{opacity:.25} }
+#paper-wrap.enter { animation:paperIn .35s ease-out; }
+@keyframes paperIn { from{ transform:translateX(-50%) scale(.92); opacity:0; }
+                     to{ transform:translateX(-50%) scale(1); opacity:1; } }
+#paper-wrap.shake { animation:paperShake .3s linear; }
+@keyframes paperShake { 0%,100%{transform:translateX(-50%)} 20%{transform:translateX(calc(-50% - 7px))}
+  40%{transform:translateX(calc(-50% + 7px))} 60%{transform:translateX(calc(-50% - 5px))}
+  80%{transform:translateX(calc(-50% + 5px))} }
+
+/* —— 黄纸上的笔划与节点 —— */
+.paper-title { font-family:"KaiTi","STKaiti",serif; fill:#b3202a; font-size:34px; letter-spacing:10px; font-weight:bold; }
+.edge { stroke:#a8855a; stroke-width:5; stroke-linecap:round; opacity:.55; }
+.ink { stroke:#d22b26; stroke-width:7; stroke-linecap:round;
+  filter:drop-shadow(0 0 3px rgba(255,90,60,.9)) drop-shadow(0 0 9px rgba(255,40,30,.55)); }
+.node-g .node { fill:#9c2f24; stroke:#571812; stroke-width:2; cursor:pointer;
+  transition:fill .15s, stroke .15s; }
+.node-g .node-core { fill:#e6d6a8; opacity:.5; pointer-events:none; }
+.node-g.v .node { fill:#e8b63c; stroke:#8a6a10; }
+.node-g.cur .node { filter:url(#glowG); stroke:#fff0b0; stroke-width:3; }
+.node-g.start .node { stroke:#fff; stroke-dasharray:5 4; }
+.node-g.start .node-core { fill:#fff; opacity:1; }
+.node-g.bad .node { fill:#ff3030; stroke:#fff; }
+
+/* —— 僵尸 —— */
+#zombie-wrap { position:absolute; left:50%; bottom:calc(58px + env(safe-area-inset-bottom,0px));
+  z-index:20; width:min(58vw,200px); transform:translate(-50%,135%); pointer-events:none;
+  --skin:#6f9c4f; --shirt:#5c5348; --shirt2:#4a423a; --eye:#ff2a2a;
+  will-change:transform; }
+#zombie { width:100%; height:auto; display:block; filter:drop-shadow(0 8px 18px rgba(0,0,0,.6)); }
+#zbody { animation:bob var(--walk,1.4s) ease-in-out infinite alternate; transform-box:fill-box; }
+@keyframes bob { from{ transform:translateY(0); } to{ transform:translateY(-7px); } }
+.armL { transform-box:fill-box; transform-origin:90% 10%; animation:swayL var(--walk,1.4s) ease-in-out infinite alternate; }
+.armR { transform-box:fill-box; transform-origin:10% 10%; animation:swayR var(--walk,1.4s) ease-in-out infinite alternate; }
+@keyframes swayL { from{ transform:rotate(10deg); } to{ transform:rotate(-14deg); } }
+@keyframes swayR { from{ transform:rotate(-10deg); } to{ transform:rotate(14deg); } }
+/* 图片头：按原 SVG 头位（高 10%~35.3%、中心 22.67%）对齐，摆动轴在脖子处 */
+#zombie-head { position:absolute; left:50%; top:10%; width:29.14%; z-index:1;
+  transform:translateX(-50%); transform-origin:50% 100%;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.55));
+  animation:headTilt var(--walk,1.4s) ease-in-out infinite alternate;
+  pointer-events:none; }
+@keyframes headTilt {
+  from{ transform:translateX(-50%) rotate(4deg); }
+  to{ transform:translateX(-50%) rotate(-5deg); } }
+
+#fog { position:absolute; left:0; right:0; bottom:0; height:55%; z-index:21; pointer-events:none;
+  background:linear-gradient(to top, rgba(138,148,164,.95), rgba(138,148,164,0)); opacity:.9; }
+#vignette { position:absolute; inset:0; z-index:25; pointer-events:none;
+  background:radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.72) 100%); }
+#vignette.red { background:radial-gradient(ellipse at center, transparent 38%, rgba(150,0,0,.82) 100%); }
+#vignette.pulse { animation:vp .55s ease-out; }
+@keyframes vp { 0%{opacity:0} 50%{opacity:1} 100%{opacity:0} }
+#stage.shake-hard { animation:shard .5s linear; }
+@keyframes shard { 10%{transform:translate(-9px,6px) rotate(.6deg)} 30%{transform:translate(8px,-7px)}
+  50%{transform:translate(-7px,5px) rotate(-.5deg)} 70%{transform:translate(6px,-4px)} 90%{transform:translate(-3px,2px)} }
+
+/* —— HUD —— */
+#hud { position:absolute; top:0; left:0; right:0; z-index:30;
+  display:flex; justify-content:space-around; align-items:center;
+  padding:8px 10px calc(6px + env(safe-area-inset-top,0px));
+  background:linear-gradient(rgba(5,6,12,.85), rgba(5,6,12,.55));
+  border-bottom:1px solid rgba(201,163,90,.25); }
+.hud-item { display:flex; flex-direction:column; align-items:center; gap:2px; }
+.hud-lbl { font-size:11px; color:#b9a77f; letter-spacing:2px; }
+.hud-val { font-size:18px; font-weight:bold; color:#ffd24d; font-variant-numeric:tabular-nums; }
+#hud-time { font-size:24px; }
+#hud-time.ok { color:#8dffb0; }
+#hud-time.warn { color:#ffe066; }
+#hud-time.danger { color:#ff7a6a; animation:pulseTxt .5s ease-in-out infinite alternate; }
+@keyframes pulseTxt { from{opacity:.55} to{opacity:1} }
+#hud-tier { font-size:11px; padding:1px 8px; border:1px solid #ffd24d; border-radius:10px; color:#ffd24d; }
+
+/* —— 底部按钮 —— */
+#controls { position:absolute; left:0; right:0; bottom:0; z-index:30;
+  display:flex; justify-content:center; gap:8px;
+  padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));
+  background:linear-gradient(rgba(5,6,12,.5), rgba(5,6,12,.88)); }
+.ctl { padding:9px 16px; font-size:15px; font-family:inherit; color:#e8d9b0;
+  background:linear-gradient(#2a251a,#191510); border:1px solid #6a5a34; border-radius:22px; cursor:pointer; }
+.ctl:active { transform:scale(.94); }
+#hud-left { position:absolute; left:12px; top:50%; transform:translateY(-50%);
+  font-size:13px; color:#b9a77f; pointer-events:none; }
+
+/* —— 特效画布 / 横幅 —— */
+#fx { position:absolute; inset:0; z-index:40; pointer-events:none; }
+#banner { position:absolute; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+  pointer-events:none; opacity:0; transition:opacity .25s; }
+#banner.on { opacity:1; }
+#banner .inner { font-size:clamp(30px,7vw,60px); font-weight:bold; color:#ffd24d; text-align:center;
+  text-shadow:0 0 24px rgba(255,140,40,.85), 0 4px 0 rgba(0,0,0,.8);
+  animation:popIn .4s cubic-bezier(.2,1.8,.4,1); }
+#banner.lvl .inner { color:#ff6a5a; text-shadow:0 0 24px rgba(255,60,40,.85), 0 4px 0 rgba(0,0,0,.8); }
+@keyframes popIn { from{ transform:scale(.5); opacity:0; } to{ transform:scale(1); opacity:1; } }
+
+/* —— 弹窗 —— */
+#overlay { position:absolute; inset:0; z-index:60; display:none; align-items:center; justify-content:center;
+  background:rgba(4,5,12,.86); padding:16px; overflow-y:auto; }
+#overlay.on { display:flex; }
+.panel { display:none; width:min(92vw,440px); background:#151828; border:2px solid #7a6a3a; border-radius:16px;
+  padding:22px 24px; text-align:center; color:#e8e0c8; box-shadow:0 0 60px rgba(0,0,0,.85); }
+.panel.show { display:block; }
+.panel .title { font-size:30px; color:#ffd24d; text-shadow:0 0 16px rgba(255,140,40,.5); margin-bottom:4px; }
+.panel .title.red { color:#ff5a5a; text-shadow:0 0 16px rgba(255,60,40,.5); }
+.subtitle { color:#b9a77f; margin-bottom:14px; letter-spacing:3px; }
+.rules { text-align:left; font-size:14.5px; line-height:1.7; color:#d8cfb4; }
+.rules b { color:#ffd24d; }
+table.tiers { width:100%; margin:12px 0; border-collapse:collapse; font-size:14px; }
+table.tiers th, table.tiers td { border:1px solid #3c3a2a; padding:5px 8px; text-align:center; }
+table.tiers th { color:#b9a77f; background:rgba(255,255,255,.04); }
+.hint { color:#9a8f74; font-size:13px; }
+.best-line { margin-top:12px; color:#b9a77f; }
+.btn { display:inline-block; margin:8px 6px 0; padding:12px 30px; font-size:17px; font-family:inherit; cursor:pointer;
+  border:2px solid #c9a35a; border-radius:26px; background:linear-gradient(#3a2f1c,#2a2115); color:#ffd24d; }
+.btn:active { transform:scale(.95); }
+.btn.primary { border-color:#ff8c5a; background:linear-gradient(#8f1f1f,#5e1212); color:#ffe9c9;
+  box-shadow:0 0 20px rgba(255,120,60,.35); }
+.fail-stats { margin:12px 0; font-size:16px; line-height:1.9; color:#d8cfb4; }
+.fail-stats span { color:#ffd24d; font-weight:bold; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+
+  <div id="paper-wrap">
+    <div id="paper-glow"></div>
+    <svg id="paper" viewBox="0 0 400 520" preserveAspectRatio="xMidYMid meet" aria-label="黄纸符阵">
+      <defs>
+        <linearGradient id="paperGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f3e4ae"/>
+          <stop offset="0.55" stop-color="#e8d393"/>
+          <stop offset="1" stop-color="#d6bd79"/>
+        </linearGradient>
+        <filter id="paperTex" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" result="n"/>
+          <feColorMatrix in="n" type="matrix"
+            values="0 0 0 0 0.42  0 0 0 0 0.31  0 0 0 0 0.15  0 0 0 0.28 0"/>
+        </filter>
+        <filter id="glowG" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="3" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <rect x="8" y="8" width="384" height="504" rx="10" fill="url(#paperGrad)" stroke="#8a6434" stroke-width="3"/>
+      <rect x="8" y="8" width="384" height="504" rx="10" fill="#000" filter="url(#paperTex)" opacity="0.5"/>
+      <rect x="30" y="30" width="340" height="460" rx="6" fill="none" stroke="#b3202a" stroke-width="3"/>
+      <rect x="38" y="38" width="324" height="444" rx="5" fill="none" stroke="#b3202a" stroke-width="1.2"/>
+      <rect x="46" y="46" width="13" height="13" fill="none" stroke="#b3202a" stroke-width="2" transform="rotate(45 52.5 52.5)"/>
+      <rect x="341" y="46" width="13" height="13" fill="none" stroke="#b3202a" stroke-width="2" transform="rotate(45 347.5 52.5)"/>
+      <text x="200" y="86" text-anchor="middle" class="paper-title">敕 令</text>
+      <g id="edges-layer"></g>
+      <g id="ink-layer"></g>
+      <g id="nodes-layer"></g>
+    </svg>
+  </div>
+
+  <div id="zombie-wrap">
+    <img id="zombie-head" src="zombie-head.png" alt="僵尸头">
+    <svg id="zombie" viewBox="0 0 200 300" aria-hidden="true">
+      <g id="zbody">
+        <g class="leg">
+          <path d="M74 186 L66 262 L86 262 L92 186 Z" fill="var(--shirt2)"/>
+          <path d="M64 262 L88 262 L84 278 L60 278 Z" fill="#2a2a24"/>
+        </g>
+        <g class="leg">
+          <path d="M126 186 L114 262 L134 262 L144 186 Z" fill="var(--shirt2)"/>
+          <path d="M112 262 L136 262 L140 278 L116 278 Z" fill="#2a2a24"/>
+        </g>
+        <g class="armL">
+          <path d="M68 124 C 44 106 30 74 34 42" fill="none" stroke="var(--skin)" stroke-width="15" stroke-linecap="round"/>
+          <g transform="translate(34 42)">
+            <path d="M0 0 L-6 -16 M-1 0 L-2 -18 M3 0 L4 -16" fill="none" stroke="var(--skin)" stroke-width="5.5" stroke-linecap="round"/>
+          </g>
+        </g>
+        <g class="armR">
+          <path d="M132 124 C 156 106 170 74 166 42" fill="none" stroke="var(--skin)" stroke-width="15" stroke-linecap="round"/>
+          <g transform="translate(166 42)">
+            <path d="M0 0 L6 -16 M1 0 L2 -18 M-3 0 L-4 -16" fill="none" stroke="var(--skin)" stroke-width="5.5" stroke-linecap="round"/>
+          </g>
+        </g>
+        <path d="M60 120 C 58 154 64 178 78 192 L 122 192 C 136 178 142 154 140 120 C 136 100 122 92 100 92 C 78 92 64 100 60 120 Z" fill="var(--shirt)"/>
+        <path d="M84 146 L96 132 L104 144 L112 130 L118 146" fill="none" stroke="var(--shirt2)" stroke-width="3.5" stroke-linejoin="round"/>
+        <ellipse cx="100" cy="164" rx="13" ry="9" fill="#7a1f1f" opacity="0.9"/>
+        <path d="M88 88 L112 88 L110 100 L90 100 Z" fill="var(--skin)"/>
+      </g>
+    </svg>
+  </div>
+
+  <div id="fog"></div>
+  <div id="vignette"></div>
+</div>
+
+<header id="hud">
+  <div class="hud-item"><span class="hud-lbl">关卡</span><span class="hud-val" id="hud-level">1</span></div>
+  <div class="hud-item"><span class="hud-lbl">得分</span><span class="hud-val" id="hud-score">0</span></div>
+  <div class="hud-item">
+    <span class="hud-lbl">封尸剩余</span>
+    <span class="hud-val ok" id="hud-time">60.0</span>
+    <span class="hud-tier" id="hud-tier">神符</span>
+  </div>
+  <div class="hud-item"><span class="hud-lbl">最高</span><span class="hud-val" id="hud-best">0</span></div>
+</header>
+
+<footer id="controls">
+  <span id="hud-left">剩余路线 0 / 0</span>
+  <button class="ctl" id="btn-undo">↩ 撤销</button>
+  <button class="ctl" id="btn-redraw">⟲ 重画</button>
+  <button class="ctl" id="btn-sound">🔊 音效</button>
+  <button class="ctl" id="btn-help">？ 玩法</button>
+</footer>
+
+<canvas id="fx"></canvas>
+<div id="banner"><div class="inner"></div></div>
+
+<div id="overlay">
+  <div class="panel show" id="panel-start">
+    <h1 class="title">🧟 僵尸一笔画符</h1>
+    <p class="subtitle">黄纸 · 朱砂 · 一笔画阵</p>
+    <div class="rules">
+      <p>僵尸正在逼近，<b>60 秒</b>内用朱砂一笔画完黄纸上的<b>所有路线</b>（每条路线只能走一次），符成则僵尸退散！</p>
+      <table class="tiers">
+        <tr><th>用时</th><th>符力</th><th>特效</th></tr>
+        <tr><td>≤ 15s</td><td style="color:#ffd24d">神符·天雷</td><td>⚡⚡⚡</td></tr>
+        <tr><td>≤ 30s</td><td style="color:#ff8c1a">灵符·真火</td><td>🔥🔥</td></tr>
+        <tr><td>≤ 45s</td><td style="color:#ff5a5a">朱符·罡风</td><td>🌪</td></tr>
+        <tr><td>≤ 60s</td><td style="color:#ffb3b3">残符·微光</td><td>✨</td></tr>
+        <tr><td>&gt; 60s</td><td style="color:#ff4040">僵尸扑脸</td><td>☠</td></tr>
+      </table>
+      <p class="hint">点红点落笔，按住拖动连线，也可以点选相邻节点；撤销/重画不扣时间，但僵尸不会等你。</p>
+    </div>
+    <button class="btn primary" id="btn-start">开始画符</button>
+    <p class="best-line">最高分：<span id="start-best">0</span></p>
+  </div>
+
+  <div class="panel" id="panel-fail">
+    <h1 class="title red">🧟 被僵尸扑倒了！</h1>
+    <p class="fail-stats">
+      第 <span id="fail-level">1</span> 关 · 坚持 <span id="fail-time">60.0</span> 秒<br>
+      得分：<span id="fail-score">0</span>
+    </p>
+    <button class="btn primary" id="btn-retry">再战本关</button>
+    <button class="btn" id="btn-restart">重新开局</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ================================================================
+   僵尸一笔画符 · 一笔画阵
+   纯逻辑部分（谜题生成等，无 DOM 依赖）与 UI 部分分离，
+   便于用 Node 直接对生成器做单元测试（tests/gen-test.js）。
+================================================================ */
+
+/* ---------------- 工具 ---------------- */
+function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------------- 常量 ---------------- */
+var LEVEL_TIME = 60;
+var TIERS = [
+  { max: 15, name: '神符·天雷', short: '神', color: '#ffd24d', bonus: 1000, mult: 3,   fx: 0 },
+  { max: 30, name: '灵符·真火', short: '灵', color: '#ff8c1a', bonus: 600,  mult: 2,   fx: 1 },
+  { max: 45, name: '朱符·罡风', short: '朱', color: '#ff5a5a', bonus: 300,  mult: 1.5, fx: 2 },
+  { max: 60, name: '残符·微光', short: '残', color: '#ffb3b3', bonus: 100,  mult: 1,   fx: 3 }
+];
+var ZOMBIES = [
+  { name: '行尸', skin: '#6f9c4f', shirt: '#5c5348', shirt2: '#4a423a', eye: '#ff2a2a' },
+  { name: '跳尸', skin: '#a9bf9b', shirt: '#3f4a5c', shirt2: '#343d4c', eye: '#ff4d4d' },
+  { name: '毛僵', skin: '#7a6a4a', shirt: '#5c3a2a', shirt2: '#4a2e21', eye: '#ffaa00' },
+  { name: '飞僵', skin: '#5f7a9c', shirt: '#2a2a3a', shirt2: '#22222f', eye: '#00cfff' },
+  { name: '尸王', skin: '#7d4f8f', shirt: '#4a2a4f', shirt2: '#3a203f', eye: '#ff00ff' },
+  { name: '血尸', skin: '#8f4a4a', shirt: '#5c3a3a', shirt2: '#4a2e2e', eye: '#ff1111' },
+  { name: '旱魃', skin: '#b05a2a', shirt: '#6a3a1a', shirt2: '#5a2f14', eye: '#ff8800' },
+  { name: '尸神', skin: '#3a5f5f', shirt: '#1f2f2f', shirt2: '#172323', eye: '#66ff66' }
+];
+
+/* ---------------- 谜题生成（欧拉一笔画） ---------------- */
+var AREA = { x0: 55, y0: 118, x1: 345, y1: 462 };
+var HIT_R = 20;
+
+function randi(rng, n) { return Math.floor(rng() * n); }
+function edgeKey(a, b) { return a < b ? a * 64 + b : b * 64 + a; }
+
+function specForLevel(level) {
+  if (level <= 1) return { fixed: true };
+  return {
+    cols: Math.min(3 + Math.floor((level + 1) / 4), 5),
+    rows: Math.min(3 + Math.floor(level / 4), 5),
+    rects: Math.min(1 + Math.floor((level - 1) / 2), 9)
+  };
+}
+
+function buildPuzzle(level) {
+  var spec = specForLevel(level);
+  var rng = mulberry32((0x9E3779B9 ^ (level * 2654435761)) >>> 0);
+  if (spec.fixed) return fixedPuzzle();
+  for (var attempt = 0; attempt < 60; attempt++) {
+    var p = genAttempt(spec, rng);
+    if (p) return p;
+  }
+  return fixedPuzzle();
+}
+
+function genAttempt(spec, rng) {
+  var cols = spec.cols, rows = spec.rows;
+  var n = cols * rows;
+  function cid(c, r) { return r * cols + c; }
+  var E = new Set();
+  function add(a, b) { E.add(edgeKey(a, b)); }
+  function has(a, b) { return E.has(edgeKey(a, b)); }
+  function nb(id) {
+    var c = id % cols, r = (id / cols) | 0, out = [];
+    if (c > 0) out.push(cid(c - 1, r));
+    if (c < cols - 1) out.push(cid(c + 1, r));
+    if (r > 0) out.push(cid(c, r - 1));
+    if (r < rows - 1) out.push(cid(c, r + 1));
+    return out;
+  }
+  function deg(id) {
+    var d = 0, ns = nb(id);
+    for (var i = 0; i < ns.length; i++) if (has(id, ns[i])) d++;
+    return d;
+  }
+  function connected() {
+    var start = -1, k;
+    for (k = 0; k < n; k++) if (deg(k) > 0) { start = k; break; }
+    if (start < 0) return false;
+    var seen = new Set([start]), q = [start];
+    while (q.length) {
+      var u = q.pop(), ns = nb(u);
+      for (var i = 0; i < ns.length; i++) {
+        if (has(u, ns[i]) && !seen.has(ns[i])) { seen.add(ns[i]); q.push(ns[i]); }
+      }
+    }
+    for (k = 0; k < n; k++) if (deg(k) > 0 && !seen.has(k)) return false;
+    return true;
+  }
+  function bfsPath(u, v) {
+    /* 带权最短路：优先开新边（0.01），尽量少翻已有边（1）。
+       奇偶修复以“增边”为主——不会删边、不会孤立节点、也不会破坏连通性。 */
+    var dist = {}, prev = {};
+    dist[u] = 0; prev[u] = -1;
+    var q = [u];
+    while (q.length) {
+      var bi = 0, i;
+      for (i = 1; i < q.length; i++) if (dist[q[i]] < dist[q[bi]]) bi = i;
+      var x = q.splice(bi, 1)[0];
+      if (x === v) break;
+      var ns = nb(x);
+      for (i = 0; i < ns.length; i++) {
+        var y = ns[i];
+        var w = has(x, y) ? 1 : 0.01;
+        var nd = dist[x] + w;
+        if (dist[y] === undefined || nd < dist[y] - 1e-9) {
+          dist[y] = nd; prev[y] = x;
+          if (q.indexOf(y) < 0) q.push(y);
+        }
+      }
+    }
+    if (prev[v] === undefined) return null;
+    var path = [v], cur = v;
+    while (prev[cur] !== -1) { cur = prev[cur]; path.push(cur); }
+    path.reverse();
+    return path;
+  }
+  function togglePath(path) {
+    for (var i = 0; i < path.length - 1; i++) {
+      var key = edgeKey(path[i], path[i + 1]);
+      if (E.has(key)) E.delete(key); else E.add(key);
+    }
+  }
+  function fixParity() {
+    var guard = 0;
+    while (true) {
+      var odd = [], k;
+      for (k = 0; k < n; k++) if (deg(k) % 2 === 1) odd.push(k);
+      if (odd.length <= 2) return true;
+      if (++guard > 400) return false;
+      var ok = false;
+      outer:
+      for (var p = 0; p < odd.length && !ok; p++) {
+        for (var q = p + 1; q < odd.length && !ok; q++) {
+          var path = bfsPath(odd[p], odd[q]);
+          if (!path) continue;
+          togglePath(path);
+          if (connected()) { ok = true; break outer; }
+          togglePath(path);
+        }
+      }
+      if (!ok) return false;
+    }
+  }
+
+  /* 1) 随机轴对齐矩形并集（矩形环并集必为全偶点图，天然可一笔画）
+        首矩形铺满网格作为难度基线，后续矩形含最小跨度且与已有图形粘连。 */
+  var usedCells = new Set(), i;
+  for (i = 0; i < spec.rects; i++) {
+    var c1, c2, r1, r2;
+    if (i === 0) {
+      c1 = 0; c2 = cols - 1; r1 = 0; r2 = rows - 1;
+    } else {
+      var arr = Array.from(usedCells);
+      var anchor = arr[randi(rng, arr.length)];
+      var ac = anchor % cols, ar = (anchor / cols) | 0;
+      var minC = Math.max(1, (cols - 1) >> 1);
+      var minR = Math.max(1, (rows - 1) >> 1);
+      var spanC = minC + randi(rng, cols - minC);
+      var spanR = minR + randi(rng, rows - minR);
+      var left = Math.min(ac, spanC - 1);
+      c1 = ac - randi(rng, left + 1);
+      c2 = c1 + spanC;
+      if (c2 > cols - 1) { c2 = cols - 1; c1 = c2 - spanC; }
+      var top = Math.min(ar, spanR - 1);
+      r1 = ar - randi(rng, top + 1);
+      r2 = r1 + spanR;
+      if (r2 > rows - 1) { r2 = rows - 1; r1 = r2 - spanR; }
+    }
+    var c, r, a, b;
+    for (c = c1; c < c2; c++) {
+      a = cid(c, r1); b = cid(c + 1, r1); add(a, b); usedCells.add(a); usedCells.add(b);
+      a = cid(c, r2); b = cid(c + 1, r2); add(a, b); usedCells.add(a); usedCells.add(b);
+    }
+    for (r = r1; r < r2; r++) {
+      a = cid(c1, r); b = cid(c1, r + 1); add(a, b); usedCells.add(a); usedCells.add(b);
+      a = cid(c2, r); b = cid(c2, r + 1); add(a, b); usedCells.add(a); usedCells.add(b);
+    }
+  }
+
+  if (!connected()) return null;
+
+  /* 2) 奇偶修复：保证奇度点 ≤ 2 */
+  if (!fixParity()) return null;
+
+  /* 3) 制造双奇点（经典一笔画路径题）：只增边不删边。
+        加一条相邻新边恰好翻转两个端点的奇偶：
+        - 当前 0 奇点 → 任选相邻未连格对（至少一端有度，两端皆偶）→ 得 2 奇点；
+        - 当前 2 奇点 → 选恰含 1 个奇点的相邻未连格对 → 维持 2 奇点；
+        找不到候选则保持原样（0/2 奇点均可一笔画）。 */
+  var oddNow = [];
+  for (var k = 0; k < n; k++) if (deg(k) % 2 === 1) oddNow.push(k);
+  var flipCands = [];
+  for (var k2 = 0; k2 < n; k2++) {
+    var ns0 = nb(k2);
+    for (var j = 0; j < ns0.length; j++) {
+      var y = ns0[j];
+      if (y > k2 && !has(k2, y) && (deg(k2) > 0 || deg(y) > 0)) {
+        var oa = deg(k2) % 2 === 1, ob = deg(y) % 2 === 1;
+        if (oddNow.length === 0 && !(oa || ob)) flipCands.push([k2, y]);
+        else if (oddNow.length === 2 && (oa !== ob)) flipCands.push([k2, y]);
+      }
+    }
+  }
+  if (flipCands.length) {
+    for (var s = flipCands.length - 1; s > 0; s--) {
+      var rr = randi(rng, s + 1);
+      var tmp = flipCands[s]; flipCands[s] = flipCands[rr]; flipCands[rr] = tmp;
+    }
+    var chosen = null;
+    for (var m2 = 0; m2 < flipCands.length; m2++) {
+      var cd = flipCands[m2];
+      if (deg(cd[0]) > 0 && deg(cd[1]) > 0) { chosen = cd; break; }
+    }
+    if (!chosen) chosen = flipCands[0];
+    add(chosen[0], chosen[1]);
+  }
+
+  /* 4) 去掉孤立点，最终校验 */
+  var keep = [], k2;
+  for (k2 = 0; k2 < n; k2++) if (deg(k2) > 0) keep.push(k2);
+  if (keep.length < 4) return null;
+  var oddCount = 0;
+  for (var k3 = 0; k3 < keep.length; k3++) if (deg(keep[k3]) % 2 === 1) oddCount++;
+  if (oddCount > 2) return null;
+  if (!connected()) return null;
+
+  /* 5) 构建最终谜题对象 */
+  var idxMap = {};
+  var gx = AREA.x1 - AREA.x0, gy = AREA.y1 - AREA.y0;
+  var nodes = keep.map(function (cell, idx) {
+    idxMap[cell] = idx;
+    var c = cell % cols, r = (cell / cols) | 0;
+    var x = AREA.x0 + gx * c / (cols - 1) + (rng() - 0.5) * 12;
+    var y = AREA.y0 + gy * r / (rows - 1) + (rng() - 0.5) * 12;
+    return {
+      x: clamp(Math.round(x), AREA.x0 + 8, AREA.x1 - 8),
+      y: clamp(Math.round(y), AREA.y0 + 8, AREA.y1 - 8)
+    };
+  });
+  var edges = [];
+  E.forEach(function (key) {
+    var a = Math.floor(key / 64), b = key % 64;
+    edges.push({ a: idxMap[a], b: idxMap[b] });
+  });
+  return makePuzzle(nodes, edges);
+}
+
+function fixedPuzzle() {
+  return makePuzzle(
+    [{ x: 170, y: 220 }, { x: 230, y: 220 }, { x: 230, y: 280 }, { x: 170, y: 280 }],
+    [{ a: 0, b: 1 }, { a: 1, b: 2 }, { a: 2, b: 3 }, { a: 3, b: 0 }]
+  );
+}
+
+function makePuzzle(nodes, edges) {
+  var p = { nodes: nodes, n: nodes.length, edges: [], usedCount: 0 };
+  var adj = nodes.map(function () { return []; });
+  edges.forEach(function (e, i) {
+    p.edges.push({ a: e.a, b: e.b, used: false, el: null });
+    adj[e.a].push({ to: e.b, ei: i });
+    adj[e.b].push({ to: e.a, ei: i });
+  });
+  p.adj = adj;
+  return p;
+}
+
+function edgeBetween(p, x, y) {
+  for (var i = 0; i < p.adj[x].length; i++) {
+    if (p.adj[x][i].to === y) return p.adj[x][i].ei;
+  }
+  return null;
+}
+
+function tierFor(t) {
+  for (var i = 0; i < TIERS.length; i++) if (t <= TIERS[i].max) return TIERS[i];
+  return null;
+}
+
+/* ================================================================
+   UI 部分（浏览器环境）
+================================================================ */
+if (typeof window !== 'undefined' && window.document) {
+(function () {
+  'use strict';
+
+  var $ = function (s) { return document.querySelector(s); };
+  var SVGNS = 'http://www.w3.org/2000/svg';
+
+  var S = {
+    level: 1, score: 0, best: 0,
+    levelStartScore: 0,
+    running: false, finished: false, failed: false,
+    t0: 0, elapsed: 0, d: 0,
+    puzzle: null, draw: null,
+    zMode: 'walk',
+    audioOn: true
+  };
+  try { S.best = +(localStorage.getItem('zfs_best') || 0); } catch (e) {}
+
+  var paperSVG = $('#paper');
+  var gEdges = $('#edges-layer'), gInk = $('#ink-layer'), gNodes = $('#nodes-layer');
+  var zombieWrap = $('#zombie-wrap');
+  var fogEl = $('#fog'), vignetteEl = $('#vignette');
+  var stageEl = $('#stage'), paperWrapEl = $('#paper-wrap'), glowEl = $('#paper-glow');
+  var bannerEl = $('#banner'), overlayEl = $('#overlay');
+
+  /* ---------- 渲染谜题 ---------- */
+  function renderPuzzle(p) {
+    gEdges.textContent = ''; gInk.textContent = ''; gNodes.textContent = '';
+    p.edges.forEach(function (e) {
+      var line = document.createElementNS(SVGNS, 'line');
+      var a = p.nodes[e.a], b = p.nodes[e.b];
+      line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+      line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+      line.setAttribute('class', 'edge');
+      gEdges.appendChild(line);
+    });
+    p.nodes.forEach(function (nd, i) {
+      var g = document.createElementNS(SVGNS, 'g');
+      g.setAttribute('class', 'node-g');
+      g.dataset.idx = i;
+      var c = document.createElementNS(SVGNS, 'circle');
+      c.setAttribute('cx', nd.x); c.setAttribute('cy', nd.y); c.setAttribute('r', 13);
+      c.setAttribute('class', 'node');
+      var core = document.createElementNS(SVGNS, 'circle');
+      core.setAttribute('cx', nd.x); core.setAttribute('cy', nd.y); core.setAttribute('r', 4.5);
+      core.setAttribute('class', 'node-core');
+      g.appendChild(c); g.appendChild(core);
+      gNodes.appendChild(g);
+    });
+  }
+
+  function refreshNodes() {
+    var p = S.puzzle, d = S.draw;
+    if (!p || !d) return;
+    var visited = new Set();
+    if (d.start >= 0) visited.add(d.start);
+    p.edges.forEach(function (e) {
+      if (e.used) { visited.add(e.a); visited.add(e.b); }
+    });
+    var gs = gNodes.children;
+    for (var i = 0; i < gs.length; i++) {
+      var g = gs[i], idx = +g.dataset.idx;
+      g.classList.toggle('v', visited.has(idx));
+      g.classList.toggle('start', idx === d.start);
+      g.classList.toggle('cur', idx === d.cur);
+    }
+  }
+
+  function addInk(e) {
+    var p = S.puzzle;
+    var line = document.createElementNS(SVGNS, 'line');
+    var a = p.nodes[e.a], b = p.nodes[e.b];
+    line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+    line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+    line.setAttribute('class', 'ink');
+    gInk.appendChild(line);
+    e.el = line;
+    var m = paperSVG.getScreenCTM();
+    if (m) {
+      var pt = new DOMPoint(b.x, b.y).matrixTransform(m);
+      fx.spark(pt.x, pt.y, '#ff5a4a', 5);
+    }
+  }
+
+  /* ---------- 交互 ---------- */
+  var pointerActive = false;
+  function svgPoint(ev) {
+    var m = paperSVG.getScreenCTM();
+    if (!m) return null;
+    var pt = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(m.inverse());
+    return pt;
+  }
+  function hitNode(pt) {
+    var p = S.puzzle; if (!p) return -1;
+    for (var i = 0; i < p.nodes.length; i++) {
+      var dx = pt.x - p.nodes[i].x, dy = pt.y - p.nodes[i].y;
+      if (dx * dx + dy * dy <= HIT_R * HIT_R) return i;
+    }
+    return -1;
+  }
+
+  function tryMove(idx) {
+    var p = S.puzzle, d = S.draw;
+    if (d.cur === -1) {
+      d.cur = idx; d.start = idx; d.path = [idx];
+      sfx.stroke();
+      refreshNodes();
+      return;
+    }
+    if (idx === d.cur) return;
+    var ei = edgeBetween(p, d.cur, idx);
+    if (ei === null || p.edges[ei].used) { invalidMove(idx); return; }
+    p.edges[ei].used = true; p.usedCount++;
+    d.stack.push(ei);
+    addInk(p.edges[ei]);
+    d.cur = idx; d.path.push(idx);
+    sfx.stroke();
+    refreshNodes();
+    if (p.usedCount === p.edges.length) {
+      if (S.elapsed > LEVEL_TIME) failGame(); else winGame();
+    }
+  }
+
+  function invalidMove(idx) {
+    var g = gNodes.children[idx];
+    if (g) {
+      g.classList.add('bad');
+      window.setTimeout(function () { g.classList.remove('bad'); }, 350);
+    }
+    paperWrapEl.classList.remove('shake');
+    void paperWrapEl.offsetWidth;
+    paperWrapEl.classList.add('shake');
+    sfx.invalid();
+  }
+
+  function undoMove() {
+    var p = S.puzzle, d = S.draw;
+    if (!p || !d || !d.stack.length) return;
+    var ei = d.stack.pop();
+    var e = p.edges[ei];
+    e.used = false; p.usedCount--;
+    if (e.el) { e.el.remove(); e.el = null; }
+    d.path.pop();
+    if (d.path.length) d.cur = d.path[d.path.length - 1];
+    else { d.cur = -1; d.start = -1; }
+    refreshNodes();
+    sfx.undo();
+  }
+
+  function redrawPuzzle() {
+    var p = S.puzzle, d = S.draw;
+    if (!p || !d) return;
+    gInk.textContent = '';
+    p.edges.forEach(function (e) { e.used = false; e.el = null; });
+    p.usedCount = 0;
+    d.cur = -1; d.start = -1; d.path = []; d.stack = [];
+    refreshNodes();
+    sfx.undo();
+  }
+
+  paperSVG.addEventListener('pointerdown', function (ev) {
+    if (!S.running || S.finished || S.failed) return;
+    ev.preventDefault();
+    try { paperSVG.setPointerCapture(ev.pointerId); } catch (e) {}
+    pointerActive = true;
+    var pt = svgPoint(ev); if (!pt) return;
+    var idx = hitNode(pt);
+    if (idx >= 0) tryMove(idx);
+  });
+  paperSVG.addEventListener('pointermove', function (ev) {
+    if (!pointerActive || !S.running || S.finished || S.failed) return;
+    var pt = svgPoint(ev); if (!pt) return;
+    var idx = hitNode(pt);
+    if (idx >= 0) tryMove(idx);
+  });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(function (t) {
+    paperSVG.addEventListener(t, function () { pointerActive = false; });
+  });
+  paperSVG.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+
+  /* ---------- 音效（WebAudio 合成，无外部资源） ---------- */
+  var sfx = {
+    ac: null,
+    ensure: function () {
+      if (!S.audioOn) return null;
+      if (!this.ac) {
+        try {
+          var AC = window.AudioContext || window.webkitAudioContext;
+          this.ac = new AC();
+        } catch (e) { return null; }
+      }
+      if (this.ac.state === 'suspended') this.ac.resume();
+      return this.ac;
+    },
+    tone: function (f, dur, type, vol, delay, slide) {
+      type = type || 'sine'; vol = vol || 0.2; delay = delay || 0; slide = slide || 0;
+      var ac = this.ensure(); if (!ac) return;
+      var t0 = ac.currentTime + delay;
+      var o = ac.createOscillator(), g = ac.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f, t0);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g); g.connect(ac.destination);
+      o.start(t0); o.stop(t0 + dur + 0.05);
+    },
+    noise: function (dur, vol, freq, delay) {
+      vol = vol || 0.3; freq = freq || 1000; delay = delay || 0;
+      var ac = this.ensure(); if (!ac) return;
+      var t0 = ac.currentTime + delay;
+      var len = Math.max(1, (dur * ac.sampleRate) | 0);
+      var buf = ac.createBuffer(1, len, ac.sampleRate);
+      var ch = buf.getChannelData(0);
+      for (var i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      var src = ac.createBufferSource(); src.buffer = buf;
+      var f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+      var g = ac.createGain(); g.gain.value = vol;
+      src.connect(f); f.connect(g); g.connect(ac.destination);
+      src.start(t0);
+    },
+    stroke: function () { this.noise(0.05, 0.1, 2600); },
+    invalid: function () { this.tone(140, 0.16, 'square', 0.14); this.tone(105, 0.16, 'sawtooth', 0.1, 0.02); },
+    undo: function () { this.tone(320, 0.09, 'triangle', 0.1, 0, -140); },
+    heartbeat: function () { this.tone(55, 0.12, 'sine', 0.5); this.tone(48, 0.12, 'sine', 0.4, 0.15); },
+    win: function (idx) {
+      this.noise(0.5 + idx * 0.12, 0.45, 750);
+      this.tone(90, 0.5 + idx * 0.15, 'sawtooth', 0.3, 0, -55);
+      var a, i;
+      if (idx === 0) { a = [660, 880, 1320, 1760]; for (i = 0; i < a.length; i++) this.tone(a[i], 0.35, 'triangle', 0.15, i * 0.09); }
+      else if (idx === 1) { a = [520, 780, 1040]; for (i = 0; i < a.length; i++) this.tone(a[i], 0.3, 'triangle', 0.13, i * 0.1); }
+      else if (idx === 2) this.tone(660, 0.3, 'triangle', 0.13, 0.1);
+      else this.tone(440, 0.25, 'triangle', 0.1, 0.1);
+    },
+    fail: function () {
+      this.noise(0.9, 0.5, 420);
+      this.tone(72, 0.9, 'sawtooth', 0.4, 0, -32);
+      this.tone(56, 0.7, 'square', 0.28, 0.15, -16);
+    }
+  };
+
+  /* ---------- 粒子特效 ---------- */
+  var fxCanvas = $('#fx'), fxctx = fxCanvas.getContext('2d');
+  var fxdpr = 1;
+  function resizeFx() {
+    fxdpr = Math.min(window.devicePixelRatio || 1, 2);
+    fxCanvas.width = Math.round(window.innerWidth * fxdpr);
+    fxCanvas.height = Math.round(window.innerHeight * fxdpr);
+    fxctx.setTransform(fxdpr, 0, 0, fxdpr, 0, 0);
+  }
+  window.addEventListener('resize', resizeFx);
+  resizeFx();
+
+  var fx = {
+    parts: [], rings: [], bolts: [], flashes: [], texts: [],
+    burst: function (p, o) {
+      for (var i = 0; i < o.n; i++) {
+        var ang = Math.random() * Math.PI * 2;
+        var sp = o.sp * (0.35 + Math.random() * 0.85);
+        this.parts.push({
+          x: p.x, y: p.y,
+          vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - o.sp * 0.25,
+          g: o.g, life: o.life * (0.6 + Math.random() * 0.6), maxLife: o.life,
+          size: o.size[0] + Math.random() * (o.size[1] - o.size[0]),
+          color: o.colors[(Math.random() * o.colors.length) | 0],
+          shape: 'spark'
+        });
+      }
+    },
+    spark: function (x, y, color, n) {
+      for (var i = 0; i < n; i++) {
+        var ang = Math.random() * Math.PI * 2;
+        var sp = 60 + Math.random() * 110;
+        this.parts.push({
+          x: x, y: y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 40,
+          g: 260, life: 0.4 + Math.random() * 0.3, maxLife: 0.7,
+          size: 1 + Math.random() * 2.5, color: color, shape: 'spark'
+        });
+      }
+    },
+    ring: function (p, color, maxR, life) {
+      this.rings.push({ x: p.x, y: p.y, r: 12, r1: maxR, life: life, maxLife: life, color: color });
+    },
+    bolt: function (p1, p2, color, life) {
+      var pts = [p1], seg = 9;
+      for (var i = 1; i < seg; i++) {
+        var t = i / seg;
+        pts.push({
+          x: lerp(p1.x, p2.x, t) + (Math.random() - 0.5) * 90,
+          y: lerp(p1.y, p2.y, t) + (Math.random() - 0.5) * 90
+        });
+      }
+      pts.push(p2);
+      this.bolts.push({ pts: pts, life: life, maxLife: life, color: color });
+    },
+    flash: function (color, life) {
+      this.flashes.push({ color: color, life: life, maxLife: life });
+    },
+    text: function (x, y, str, color, size) {
+      this.texts.push({ x: x, y: y, str: str, color: color, size: size, life: 1.3, maxLife: 1.3, vy: -40 });
+    },
+    ash: function (x, y, n) {
+      var cols = ['#6f9c4f', '#8a8a8a', '#4a4a4a'];
+      for (var i = 0; i < n; i++) {
+        this.parts.push({
+          x: x + (Math.random() - 0.5) * 60, y: y + (Math.random() - 0.5) * 80,
+          vx: (Math.random() - 0.5) * 60, vy: -Math.random() * 160 - 20,
+          g: -30, life: 1.6, maxLife: 1.6,
+          size: 2 + Math.random() * 4, color: cols[i % 3], shape: 'ash'
+        });
+      }
+    },
+    update: function (dt) {
+      var i;
+      for (i = this.parts.length - 1; i >= 0; i--) {
+        var p = this.parts[i];
+        p.life -= dt;
+        if (p.life <= 0) { this.parts.splice(i, 1); continue; }
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.vy += p.g * dt;
+        p.vx *= 0.99;
+      }
+      for (i = this.rings.length - 1; i >= 0; i--) {
+        if ((this.rings[i].life -= dt) <= 0) this.rings.splice(i, 1);
+      }
+      for (i = this.bolts.length - 1; i >= 0; i--) {
+        if ((this.bolts[i].life -= dt) <= 0) this.bolts.splice(i, 1);
+      }
+      for (i = this.flashes.length - 1; i >= 0; i--) {
+        if ((this.flashes[i].life -= dt) <= 0) this.flashes.splice(i, 1);
+      }
+      for (i = this.texts.length - 1; i >= 0; i--) {
+        var t = this.texts[i];
+        t.life -= dt; t.y += t.vy * dt; t.vy *= 0.92;
+        if (t.life <= 0) this.texts.splice(i, 1);
+      }
+    },
+    draw: function () {
+      var ctx = fxctx, W = window.innerWidth, H = window.innerHeight;
+      ctx.clearRect(0, 0, W, H);
+      var i, p, t;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (i = 0; i < this.rings.length; i++) {
+        var r = this.rings[i];
+        t = 1 - r.life / r.maxLife;
+        ctx.beginPath();
+        ctx.arc(r.x, r.y, lerp(r.r, r.r1, t), 0, Math.PI * 2);
+        ctx.strokeStyle = r.color;
+        ctx.globalAlpha = r.life / r.maxLife;
+        ctx.lineWidth = 5 * (1 - t) + 1;
+        ctx.stroke();
+      }
+      for (i = 0; i < this.parts.length; i++) {
+        p = this.parts[i];
+        ctx.globalAlpha = Math.min(1, p.life / p.maxLife * 1.5);
+        ctx.fillStyle = p.color;
+        if (p.shape === 'ash') {
+          ctx.fillRect(p.x, p.y, p.size, p.size);
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (p.life / p.maxLife + 0.3), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      for (i = 0; i < this.bolts.length; i++) {
+        var b = this.bolts[i];
+        ctx.globalAlpha = b.life / b.maxLife;
+        ctx.strokeStyle = b.color;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = b.color;
+        ctx.shadowBlur = 16;
+        ctx.beginPath();
+        ctx.moveTo(b.pts[0].x, b.pts[0].y);
+        for (var k = 1; k < b.pts.length; k++) ctx.lineTo(b.pts[k].x, b.pts[k].y);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+      ctx.restore();
+      for (i = 0; i < this.flashes.length; i++) {
+        var f = this.flashes[i];
+        ctx.globalAlpha = f.life / f.maxLife * 0.85;
+        ctx.fillStyle = f.color;
+        ctx.fillRect(0, 0, W, H);
+      }
+      ctx.globalAlpha = 1;
+      for (i = 0; i < this.texts.length; i++) {
+        var tt = this.texts[i];
+        ctx.globalAlpha = Math.min(1, tt.life / tt.maxLife * 1.6);
+        ctx.font = 'bold ' + tt.size + 'px KaiTi, "STKaiti", serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = tt.color;
+        ctx.shadowColor = tt.color;
+        ctx.shadowBlur = 18;
+        ctx.fillText(tt.str, tt.x, tt.y);
+        ctx.shadowBlur = 0;
+      }
+      ctx.globalAlpha = 1;
+    }
+  };
+
+  /* ---------- HUD / 横幅 / 弹窗 ---------- */
+  function updateHud() {
+    $('#hud-level').textContent = S.level;
+    $('#hud-score').textContent = S.score;
+    $('#hud-best').textContent = S.best;
+    var rem = Math.max(0, LEVEL_TIME - S.elapsed);
+    var timeEl = $('#hud-time');
+    timeEl.textContent = (S.running || S.elapsed > 0 ? rem : LEVEL_TIME).toFixed(1);
+    timeEl.classList.toggle('ok', rem > 30);
+    timeEl.classList.toggle('warn', rem <= 30 && rem > 15);
+    timeEl.classList.toggle('danger', rem <= 15);
+    var tier = tierFor(S.elapsed);
+    var tierEl = $('#hud-tier');
+    if (tier) {
+      tierEl.textContent = tier.short + '符';
+      tierEl.style.color = tier.color;
+      tierEl.style.borderColor = tier.color;
+    } else {
+      tierEl.textContent = '—';
+      tierEl.style.color = '#888';
+      tierEl.style.borderColor = '#555';
+    }
+    var p = S.puzzle;
+    if (p) $('#hud-left').textContent = '剩余路线 ' + (p.edges.length - p.usedCount) + ' / ' + p.edges.length;
+  }
+
+  var bannerTimer = null;
+  function showBanner(html, cls, color) {
+    var inner = bannerEl.firstElementChild;
+    inner.innerHTML = html;
+    bannerEl.className = 'on ' + cls;
+    if (color) inner.style.color = color;
+    window.clearTimeout(bannerTimer);
+    bannerTimer = window.setTimeout(function () { bannerEl.className = ''; }, 1700);
+  }
+
+  function showPanel(id) {
+    var panels = overlayEl.querySelectorAll('.panel');
+    for (var i = 0; i < panels.length; i++) {
+      panels[i].classList.toggle('show', panels[i].id === 'panel-' + id);
+    }
+    if (id === 'start') $('#start-best').textContent = S.best;
+    overlayEl.classList.add('on');
+  }
+  function hideOverlay() { overlayEl.classList.remove('on'); }
+
+  function saveBest() {
+    if (S.score > S.best) {
+      S.best = S.score;
+      try { localStorage.setItem('zfs_best', String(S.best)); } catch (e) {}
+    }
+  }
+
+  /* ---------- 僵尸动画 ---------- */
+  function setZombieSkin(z) {
+    zombieWrap.style.setProperty('--skin', z.skin);
+    zombieWrap.style.setProperty('--shirt', z.shirt);
+    zombieWrap.style.setProperty('--shirt2', z.shirt2);
+    zombieWrap.style.setProperty('--eye', z.eye);
+  }
+  function updateZombie() {
+    if (S.zMode !== 'walk') return;
+    var d = S.d;
+    var ease = 1 - Math.pow(1 - d, 2.4);
+    var y = lerp(135, -12, ease);
+    var sc = lerp(0.55, 1.15, ease);
+    var sway = Math.sin(performance.now() / 420) * d * 14;
+    zombieWrap.style.transform = 'translate(calc(-50% + ' + sway.toFixed(1) + 'px), ' + y.toFixed(1) + '%) scale(' + sc.toFixed(3) + ')';
+    document.documentElement.style.setProperty('--walk', lerp(1.5, 0.45, ease).toFixed(2) + 's');
+    fogEl.style.opacity = String(clamp(1 - d * 1.7, 0, 1) * 0.55);
+  }
+  function animZombie(target, dur, cb) {
+    var w = zombieWrap;
+    var cur = getComputedStyle(w).transform;
+    w.style.transition = 'none';
+    w.style.transform = cur;
+    void w.offsetWidth;
+    w.style.transition = 'transform ' + dur + 's cubic-bezier(.3,.8,.4,1), opacity ' + dur + 's ease-in, filter ' + dur + 's ease-in';
+    w.style.transform = target;
+    if (cb) window.setTimeout(cb, dur * 1000);
+  }
+  function repelZombie(fxIdx) {
+    S.zMode = 'repel';
+    var w = zombieWrap;
+    if (fxIdx === 0) {
+      var r = w.getBoundingClientRect();
+      fx.ash(r.left + r.width / 2, r.top + r.height * 0.4, 90);
+      animZombie('translate(-50%, -28%) scale(1.45) rotate(6deg)', 0.5, function () {
+        w.style.display = 'none';
+      });
+      w.style.opacity = '0';
+      w.style.filter = 'brightness(3) saturate(0)';
+    } else {
+      var targets = [
+        'translate(-50%, 170%) rotate(26deg) scale(.45)',
+        'translate(-50%, 110%) rotate(34deg) scale(.65)',
+        'translate(-50%, 46%) rotate(-14deg) scale(.95)'
+      ];
+      var op = [0, 0.15, 1];
+      var dur = [0.6, 0.7, 0.75];
+      var idx = fxIdx - 1;
+      animZombie(targets[idx], dur[idx]);
+      w.style.opacity = String(op[idx]);
+    }
+  }
+
+  /* ---------- 关卡流程 ---------- */
+  function startLevel(lv) {
+    var z = ZOMBIES[(lv - 1) % ZOMBIES.length];
+    S.level = lv; S.finished = false; S.failed = false;
+    S.running = true; S.zMode = 'walk'; S.d = 0; S.elapsed = 0;
+    S.t0 = performance.now();
+    hbAcc = 0;
+    setZombieSkin(z);
+    zombieWrap.style.display = '';
+    zombieWrap.style.transition = '';
+    zombieWrap.style.transform = 'translate(-50%, 135%)';
+    zombieWrap.style.opacity = '1';
+    zombieWrap.style.filter = '';
+    glowEl.classList.remove('on');
+    glowEl.style.background = 'none';
+    vignetteEl.classList.remove('red', 'pulse');
+    stageEl.classList.remove('shake-hard');
+    S.puzzle = buildPuzzle(lv);
+    S.draw = { cur: -1, start: -1, path: [], stack: [] };
+    renderPuzzle(S.puzzle);
+    refreshNodes();
+    S.levelStartScore = S.score;
+    paperWrapEl.classList.remove('enter');
+    void paperWrapEl.offsetWidth;
+    paperWrapEl.classList.add('enter');
+    updateHud();
+    showBanner('第 ' + lv + ' 关 · ' + z.name, 'lvl', '#ff6a5a');
+  }
+
+  function winGame() {
+    S.finished = true; S.running = false;
+    var t = S.elapsed;
+    var tier = tierFor(t) || TIERS[3];
+    var gain = Math.round((LEVEL_TIME - t) * 10 * tier.mult + tier.bonus);
+    S.score += gain;
+    saveBest();
+    updateHud();
+    glowEl.style.background = 'radial-gradient(circle, ' + tier.color + '55, transparent 70%)';
+    glowEl.classList.add('on');
+    playTierFx(tier.fx);
+    repelZombie(tier.fx);
+    sfx.win(tier.fx);
+    showBanner(tier.name + ' ！ +' + gain, 'tier', tier.color);
+    window.setTimeout(function () { startLevel(S.level + 1); }, 2100);
+  }
+
+  function failGame() {
+    S.failed = true; S.running = false;
+    S.zMode = 'lunge';
+    stageEl.classList.add('shake-hard');
+    animZombie('translate(-50%, -60%) scale(2.7) rotate(-9deg)', 0.45);
+    fx.flash('#ff2020', 0.3);
+    saveBest();
+    window.setTimeout(function () {
+      sfx.fail();
+      vignetteEl.classList.add('red');
+      window.setTimeout(showFailPanel, 400);
+    }, 420);
+  }
+
+  function showFailPanel() {
+    $('#fail-level').textContent = S.level;
+    $('#fail-score').textContent = S.score;
+    $('#fail-time').textContent = Math.min(S.elapsed, LEVEL_TIME).toFixed(1) + ' 秒';
+    showPanel('fail');
+  }
+
+  function paperCenter() {
+    var r = paperSVG.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+  function zombieHead() {
+    var r = zombieWrap.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height * 0.22 };
+  }
+
+  function playTierFx(idx) {
+    var c = paperCenter();
+    var z = zombieHead();
+    var M = Math.max(window.innerWidth, window.innerHeight);
+    if (idx === 0) {
+      fx.flash('#fff', 0.4);
+      fx.ring(c, '#ffd24d', M * 0.6, 1.1);
+      fx.bolt(c, z, '#ffe9a0', 0.55);
+      fx.bolt(c, z, '#fff', 0.3);
+      fx.burst(c, { n: 130, colors: ['#ffd24d', '#fff3c0', '#ff9a2a', '#fff'], sp: 420, g: 300, life: 1.4, size: [2, 7] });
+      fx.text(c.x, c.y - 60, '天雷诛邪！', '#ffd24d', 44);
+    } else if (idx === 1) {
+      fx.flash('#ffd9a0', 0.25);
+      fx.ring(c, '#ff8c1a', M * 0.42, 0.9);
+      fx.bolt(c, z, '#ffc46a', 0.4);
+      fx.burst(c, { n: 90, colors: ['#ff8c1a', '#ffd24d', '#ff4d2a'], sp: 340, g: 260, life: 1.2, size: [2, 6] });
+      fx.text(c.x, c.y - 60, '真火焚尸！', '#ff8c1a', 38);
+    } else if (idx === 2) {
+      fx.flash('#ffc9c0', 0.15);
+      fx.ring(c, '#ff5a5a', M * 0.3, 0.7);
+      fx.burst(c, { n: 55, colors: ['#ff5a5a', '#ffb0a0', '#fff'], sp: 260, g: 200, life: 1, size: [2, 5] });
+      fx.text(c.x, c.y - 60, '罡风退敌', '#ff5a5a', 32);
+    } else {
+      fx.flash('#ffffff', 0.1);
+      fx.ring(c, '#ffb3b3', M * 0.18, 0.5);
+      fx.burst(c, { n: 26, colors: ['#ffd9d9', '#fff'], sp: 160, g: 120, life: 0.8, size: [1, 4] });
+      fx.text(c.x, c.y - 60, '残符·微光', '#ffb3b3', 26);
+    }
+  }
+
+  /* ---------- 主循环 ---------- */
+  var hbAcc = 0;
+  var lastT = performance.now();
+  function frame(now) {
+    var dt = clamp((now - lastT) / 1000, 0, 0.1);
+    lastT = now;
+    if (S.running && !S.finished && !S.failed) {
+      S.elapsed = (now - S.t0) / 1000;
+      if (S.elapsed > LEVEL_TIME) failGame();
+      else {
+        S.d = clamp(S.elapsed / LEVEL_TIME, 0, 1);
+        updateZombie();
+        updateHeartbeat(dt);
+        updateHud();
+      }
+    }
+    fx.update(dt);
+    fx.draw();
+    requestAnimationFrame(frame);
+  }
+  function updateHeartbeat(dt) {
+    if (S.d < 0.35) { hbAcc = 0; return; }
+    var interval = lerp(1.5, 0.42, S.d);
+    hbAcc += dt;
+    if (hbAcc >= interval) {
+      hbAcc = 0;
+      sfx.heartbeat();
+      vignetteEl.classList.remove('pulse');
+      void vignetteEl.offsetWidth;
+      vignetteEl.classList.add('pulse');
+    }
+  }
+
+  /* ---------- 按钮 ---------- */
+  $('#btn-undo').addEventListener('click', function () {
+    if (S.running && !S.finished && !S.failed) undoMove();
+  });
+  $('#btn-redraw').addEventListener('click', function () {
+    if (S.running && !S.finished && !S.failed) redrawPuzzle();
+  });
+  $('#btn-sound').addEventListener('click', function () {
+    S.audioOn = !S.audioOn;
+    $('#btn-sound').textContent = S.audioOn ? '🔊 音效' : '🔇 静音';
+    if (S.audioOn) sfx.ensure();
+  });
+  $('#btn-help').addEventListener('click', function () {
+    var running = S.running && !S.finished && !S.failed;
+    $('#btn-start').textContent = running ? '继续游戏' : '开始画符';
+    showPanel('start');
+  });
+  $('#btn-start').addEventListener('click', function () {
+    sfx.ensure();
+    if (S.running && !S.finished && !S.failed) { hideOverlay(); return; }
+    newGame();
+  });
+  $('#btn-retry').addEventListener('click', function () {
+    S.score = S.levelStartScore;
+    hideOverlay();
+    startLevel(S.level);
+  });
+  $('#btn-restart').addEventListener('click', function () { newGame(); });
+
+  function newGame() {
+    S.score = 0;
+    hideOverlay();
+    startLevel(1);
+  }
+
+  /* ---------- 初始场景 ---------- */
+  function showIdleScene() {
+    setZombieSkin(ZOMBIES[0]);
+    S.puzzle = fixedPuzzle();
+    S.draw = { cur: -1, start: -1, path: [], stack: [] };
+    renderPuzzle(S.puzzle);
+    refreshNodes();
+    zombieWrap.style.transform = 'translate(-50%, 62%) scale(.82)';
+    document.documentElement.style.setProperty('--walk', '1.4s');
+    fogEl.style.opacity = '0.55';
+  }
+
+  showIdleScene();
+  updateHud();
+  showPanel('start');
+  requestAnimationFrame(frame);
+})();
+}
+</script>
+</body>
+</html>

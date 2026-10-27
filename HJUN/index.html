@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IGOU生成器</title>
+    <link rel="icon" href="./image/icon.png">
+    <style>
+        .main {
+            display: flex;
+            flex-flow: column nowrap;
+            align-items: center
+        }
+
+        .control {
+            display: flex;
+            flex-flow: row nowrap;
+            gap: 16px;
+            flex-grow: 20px;
+        }
+
+        #name {
+            outline-style: none;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            padding: 13px 14px;
+            width: 60vw;
+            max-width: 400px;
+            font-size: 24px;
+            font-weight: 700;
+            font-family: "Microsoft soft";
+        }
+
+        #button {
+            max-width: 100px;
+            min-width: 20vw;
+            border: 0;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: "Microsoft soft";
+            color: #1e1e1e;
+            box-shadow: 0px 0px 6px 1px rgb(209 209 209);
+            transition: 0.2s;
+        }
+
+        #button:hover {
+            background: rgba(45, 185, 172, 0.1);
+            color: #2db9ac;
+            cursor: pointer;
+        }
+
+        #canvas {
+            padding-top: 20px;
+            height: calc(100vh - 300px);
+        }
+
+        .img {
+            padding-top: 20px;
+            height: calc(100vh - 300px);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main" id="main">
+        <div class="control">
+            <input type="text" placeholder="IGOU，你的名字是？" name="" id="name">
+            <button id="button">成为IGOU</button>
+        </div>
+        <canvas id="canvas" style="display: none;" width="1000" height="1523"></canvas>
+    </div>
+    <script>
+        const text = document.getElementById('name')
+        const button = document.getElementById('button')
+        const main = document.getElementById('main')
+        const canvasDom = document.getElementById('canvas');
+        const canvas = canvasDom.getContext('2d');
+        const img = new Image();
+        img.src = 'image/main.jpg';
+        img.onload = function () {
+            canvas.drawImage(img, 0, 0);
+        }
+        button.addEventListener('click', () => {
+            let ijunId = 'iGOU' + (Math.floor(Math.random() * 990) + 9).toString().padStart(3, '0');
+            const value = text.value
+            if (value == '') {
+                alert('IGOU，请输入你的名字。')
+                return
+            }else if(value == '马海威') {
+                ijunId = 'iGOU002';
+            }else if(value == '赵俊日') {
+                ijunId = 'iGOU001';
+            }else if(value == '彭彭' || value == 'PP') {
+                ijunId = 'iGOU003';
+            }else if(value == 'DailySandy') {
+                ijunId = 'iGOU000';
+            }else if(value == '厨神罢了') {
+                ijunId = 'iGOU999';
+            }else if(value == '熳酱') {
+                ijunId = 'iGOU999';
+            }else if(value == '乘风儿' || value == 'CF2') {
+                ijunId = 'IGOU414-HGOU001';
+            }
+            
+            const img = new Image();
+            img.src = 'image/main.jpg';
+            img.onload = () => {
+                canvas.drawImage(img, 0, 0);
+                canvas.fillStyle = '#212121';   // 文字填充颜色
+                canvas.font = 'normal bold 100px sans-serif';
+                canvas.fontWeight = "700";
+                canvas.fillText(value, 102, 895);
+                canvas.font = 'italic 90px Arial';
+                canvas.fillStyle = 'red';
+                canvas.fillText(ijunId, 100, 1150);
+                canvas.stroke();
+                let dataImg = new Image()
+                dataImg.src = canvasDom.toDataURL('image/png')
+                dataImg.className = 'img'
+                console.log(dataImg);
+                main.appendChild(dataImg)
+            }
+        })
+    </script>
+
+</body>
+
+</html>

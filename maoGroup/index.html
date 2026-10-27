@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IJUN生成器</title>
+    <link rel="icon" href="./image/icon.png">
+    <style>
+        .main {
+            display: flex;
+            flex-flow: column nowrap;
+            align-items: center
+        }
+
+        .control {
+            display: flex;
+            flex-flow: row nowrap;
+            gap: 16px;
+            flex-grow: 20px;
+        }
+
+        #name {
+            outline-style: none;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            padding: 13px 14px;
+            width: 60vw;
+            max-width: 400px;
+            font-size: 24px;
+            font-weight: 700;
+            font-family: "Microsoft soft";
+        }
+
+        #button {
+            max-width: 100px;
+            min-width: 20vw;
+            border: 0;
+            font-size: 16px;
+            font-weight: 700;
+            font-family: "Microsoft soft";
+            color: #1e1e1e;
+            box-shadow: 0px 0px 6px 1px rgb(209 209 209);
+            transition: 0.2s;
+        }
+
+        #button:hover {
+            background: rgba(45, 185, 172, 0.1);
+            color: #2db9ac;
+            cursor: pointer;
+        }
+
+        #canvas {
+            padding-top: 20px;
+            height: calc(100vh - 300px);
+        }
+
+        .img {
+            padding-top: 20px;
+            height: calc(100vh - 300px);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="main" id="main">
+        <div class="control">
+            <input type="text" placeholder="IJUN，你的名字是？" name="" id="name">
+            <button id="button">成为IJUN</button>
+        </div>
+        <canvas id="canvas" style="display: none;" width="1000" height="1523"></canvas>
+    </div>
+    <script>
+        const text = document.getElementById('name')
+        const button = document.getElementById('button')
+        const main = document.getElementById('main')
+        const canvasDom = document.getElementById('canvas');
+        const canvas = canvasDom.getContext('2d');
+        const img = new Image();
+        img.src = 'image/main.jpg';
+        img.onload = function () {
+            canvas.drawImage(img, 0, 0);
+        }
+        button.addEventListener('click', () => {
+            let ijunId = 'IJUN' + (Math.floor(Math.random() * 990) + 10).toString().padStart(3, '0');
+            let hjunId = '';
+            const value = text.value
+            if (value == '') {
+                alert('IJUN，请输入你的名字。')
+                return
+            }else if(value == '陈博' || value == 'CBO' || value == 'PYL' ) {
+                ijunId = 'IJUN002';
+            }else if(value == '管泽元') {
+                ijunId = 'IJUN001';
+            }else if(value == '马海威') {
+                ijunId = 'IJUN003';
+            }else if(value == 'DailySandy') {
+                ijunId = 'IJUN000';
+            }else if(value == '雨童'){
+                ijunId = 'IJUN004';
+            }else if(value == '丁勇浩'){
+                ijunId = 'IJUN005';
+            }else if(value == '毛毛'){
+                ijunId = 'IJUN006';
+            }else if(value == '硕硕'){
+                ijunId = 'IJUN007';
+            }else if(value == 'Mage'){
+                ijunId = 'IJUN008';
+            }else if(value == 'CSBO'){
+                ijunId = 'IJUN414';
+                hjunId = 'HJUN001';
+            }
+            // canvasDom.style.display = 'inline';
+            const img = new Image();
+            img.src = 'image/main.jpg';
+            img.onload = () => {
+                canvas.drawImage(img, 0, 0);
+                canvas.fillStyle = '#212121';   // 文字填充颜色
+                canvas.font = 'normal bold 100px sans-serif';
+                canvas.fontWeight = "700";
+                canvas.fillText(value, 102, 895);
+                canvas.font = 'normal bold 30px sans-serif';
+                canvas.fillText(value, 550, 1432);
+                canvas.font = 'italic 90px Arial';
+                canvas.fillStyle = 'red';
+                canvas.fillText(ijunId, 100, 1110);
+                if( hjunId != '' ){
+                    canvas.fillText(hjunId, 100, 1210);
+                }
+                canvas.stroke();
+                let dataImg = new Image()
+                dataImg.src = canvasDom.toDataURL('image/png')
+                dataImg.className = 'img'
+                console.log(dataImg);
+                main.appendChild(dataImg)
+            }
+        })
+    </script>
+
+</body>
+
+</html>
